@@ -4,7 +4,7 @@ import scala.collection._
 
 import com.quantifind.kafka.OffsetGetter.{BrokerInfo, KafkaInfo, OffsetInfo}
 import kafka.api.{OffsetRequest, PartitionOffsetRequestInfo}
-import kafka.common.{BrokerNotAvailableException, TopicAndPartition}
+import kafka.common.{KafkaException, BrokerNotAvailableException, TopicAndPartition}
 import kafka.consumer.SimpleConsumer
 import kafka.utils.{Json, Logging, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
@@ -54,8 +54,9 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
 
   private def processPartition(group: String, topic: String, pid: Int): Option[OffsetInfo] = {
     try {
-      val (offset, stat: Stat) = ZkUtils.readData(zkClient, s"${ZkUtils.ConsumersPath}/$group/offsets/$topic/$pid")
-      val (owner, _) = ZkUtils.readDataMaybeNull(zkClient, s"${ZkUtils.ConsumersPath}/$group/owners/$topic/$pid")
+      val (partitionInfoJson, stat: Stat) = ZkUtils.readData(zkClient, s"/kafkastorm2/$group/partition_$pid")
+      val partitionInfo = Json.parseFull(partitionInfoJson).getOrElse(throw new KafkaException("Partition id %pid does not exist".format(pid))).asInstanceOf[Map[String, Any]]
+      val offset = partitionInfo.get("offset").get.asInstanceOf[Int].asInstanceOf[Long]
 
       ZkUtils.getLeaderForPartition(zkClient, topic, pid) match {
         case Some(bid) =>
@@ -70,9 +71,9 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
               OffsetInfo(group = group,
                 topic = topic,
                 partition = pid,
-                offset = offset.toLong,
+                offset = offset,
                 logSize = logSize,
-                owner = owner,
+                owner = Option(group),
                 creation = Time.fromMilliseconds(stat.getCtime),
                 modified = Time.fromMilliseconds(stat.getMtime))
           }
@@ -108,7 +109,7 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
     val topicList = if (topics.isEmpty) {
       try {
         ZkUtils.getChildren(
-          zkClient, s"${ZkUtils.ConsumersPath}/$group/offsets").toSeq
+          zkClient, s"${ZkUtils.BrokerTopicsPath}").toSeq
       } catch {
         case _: ZkNoNodeException => Seq()
       }
@@ -129,7 +130,7 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
 
   def getGroups: Seq[String] = {
     try {
-      ZkUtils.getChildren(zkClient, ZkUtils.ConsumersPath)
+      ZkUtils.getChildren(zkClient, "/kafkastorm2")
     } catch {
       case NonFatal(t) =>
         error(s"could not get groups because of ${t.getMessage}", t)
@@ -173,27 +174,18 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
    * @return
    */
   def getActiveTopicMap: Map[String, Seq[String]] = {
-    try {
-      ZkUtils.getChildren(zkClient, ZkUtils.ConsumersPath).flatMap {
-        group =>
-          try {
-            ZkUtils.getConsumersPerTopic(zkClient, group).keySet.map {
-              key =>
-                key -> group
-            }
-          } catch {
-            case NonFatal(t) =>
-              error(s"could not get consumers for group $group", t)
-              Seq()
-          }
-      }.groupBy(_._1).mapValues {
-        _.unzip._2
-      }
-    } catch {
-      case NonFatal(t) =>
-        error(s"could not get topic maps because of ${t.getMessage}", t)
-        Map()
-    }
+    Map(ZkUtils.getChildren(zkClient, "/kafkastorm2").flatMap {
+      group =>
+        ZkUtils.getChildren(zkClient, s"/kafkastorm2/$group").map {
+          pid => 
+            val (partitionInfoJson, _) = ZkUtils.readData(zkClient, s"/kafkastorm2/$group/$pid")
+            val partitionInfo = Json.parseFull(partitionInfoJson).getOrElse(throw new KafkaException("Partition id %pid does not exist".format(pid))).asInstanceOf[Map[String, Any]]
+            val topic = partitionInfo.get("topic").get.asInstanceOf[String]
+            topic -> group
+        }.groupBy(_._1).mapValues {
+          _.unzip._2.toList.distinct
+        }
+      }.map { e =>  e._1 -> e._2 }: _*) 
   }
 
   def getActiveTopics: Node = {

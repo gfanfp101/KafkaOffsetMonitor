@@ -35,7 +35,7 @@ trait UnfilteredWebApp[T <: Arguments] extends ArgMain[T] {
 object UnfilteredWebApp {
 
   trait Arguments extends FieldArgs {
-    var port = Port.any
+    var port = 59723
   }
 
 }

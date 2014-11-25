@@ -4,7 +4,7 @@ import java.util.{Timer, TimerTask}
 
 import scala.concurrent.duration._
 
-import com.quantifind.kafka.OffsetGetter.KafkaInfo
+import com.quantifind.kafka.OffsetGetter.{KafkaInfo, OffsetInfo}
 import com.quantifind.utils.UnfilteredWebApp
 import kafka.utils.{Logging, ZKStringSerializer}
 import net.liftweb.json.{CustomSerializer, NoTypeHints, Serialization}
@@ -102,12 +102,21 @@ object OffsetGetterWeb extends UnfilteredWebApp[OWArgs] with Logging {
   def getActiveTopics(args: OWArgs) = withOG(args) {
     _.getActiveTopics
   }
+
   def getTopics(args: OWArgs) = withOG(args) {
     _.getTopics
   }
 
   def getTopicDetail(topic: String, args: OWArgs) = withOG(args) {
     _.getTopicDetail(topic)
+  }
+
+  def singleOffInfo(group: String, topic: String, args: OWArgs) = withOG(args) {
+    _.offsetInfo(group, Seq(topic))
+  }
+
+  def singleOffRatio(group: String, topic: String, args: OWArgs) = withOG(args) {
+    _.singleOffRatio(group, topic)
   }
 
   def getClusterViz(args: OWArgs) = withOG(args) {
@@ -152,6 +161,10 @@ object OffsetGetterWeb extends UnfilteredWebApp[OWArgs] with Logging {
         JsonContent ~> ResponseString(write(getTopicDetail(group, args)))
       case GET(Path(Seg("activetopics" :: Nil))) =>
         JsonContent ~> ResponseString(write(getActiveTopics(args)))
+      case GET(Path(Seg("singleoffinfo" :: group :: topic :: Nil))) =>
+        JsonContent ~> ResponseString(write(singleOffInfo(group, topic, args)))
+      case GET(Path(Seg("singleoffratio" :: group :: topic :: Nil))) =>
+        JsonContent ~> ResponseString(write(singleOffRatio(group, topic, args)))
     }
   }
 }

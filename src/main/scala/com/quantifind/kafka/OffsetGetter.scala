@@ -12,6 +12,8 @@ import org.I0Itec.zkclient.exception.ZkNoNodeException
 import com.twitter.util.Time
 import org.apache.zookeeper.data.Stat
 import scala.util.control.NonFatal
+import scala.util.parsing.json.JSONObject
+import scala.collection.immutable.ListMap
 
 /**
  * a nicer version of kafka's ConsumerOffsetChecker tool
@@ -104,7 +106,7 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
     } yield BrokerInfo(id = bid, host = consumer.host, port = consumer.port)
   }
 
-  private def offsetInfo(group: String, topics: Seq[String] = Seq()): Seq[OffsetInfo] = {
+  def offsetInfo(group: String, topics: Seq[String] = Seq()): Seq[OffsetInfo] = {
 
     val topicList = if (topics.isEmpty) {
       try {
@@ -126,6 +128,21 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
       brokers = brok.toSeq,
       offsets = off
     )
+  }
+
+  def singleOffRatio(group: String, topic: String): JSONObject = {
+    val offsets = offsetInfo(group, Seq(topic))
+    val offsetSum = offsets.view.map(_.offset).sum
+    val logSizeSum = offsets.view.map(_.logSize).sum
+    val lagSum = offsets.view.map(_.lag).sum
+    val result = ListMap[String, Any](
+      "group" -> group,
+      "topic" -> topic,
+      "offsetSum" -> offsetSum,
+      "logSizeSum" -> logSizeSum,
+      "lagSum" -> lagSum,
+      "ratio (%)" -> lagSum/logSizeSum)
+    JSONObject(result toMap)
   }
 
   def getGroups: Seq[String] = {

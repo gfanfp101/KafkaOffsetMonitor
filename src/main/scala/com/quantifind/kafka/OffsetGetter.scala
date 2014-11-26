@@ -191,18 +191,18 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
    * @return
    */
   def getActiveTopicMap: Map[String, Seq[String]] = {
-    Map(ZkUtils.getChildren(zkClient, "/kafkastorm2").flatMap {
+    ZkUtils.getChildren(zkClient, "/kafkastorm2").map {
       group =>
         ZkUtils.getChildren(zkClient, s"/kafkastorm2/$group").map {
           pid => 
             val (partitionInfoJson, _) = ZkUtils.readData(zkClient, s"/kafkastorm2/$group/$pid")
             val partitionInfo = Json.parseFull(partitionInfoJson).getOrElse(throw new KafkaException("Partition id %pid does not exist".format(pid))).asInstanceOf[Map[String, Any]]
             val topic = partitionInfo.get("topic").get.asInstanceOf[String]
-            topic -> group
-        }.groupBy(_._1).mapValues {
-          _.unzip._2.toList.distinct
+            Tuple2(topic, group)
         }
-      }.map { e =>  e._1 -> e._2 }: _*) 
+      }.foldLeft(Seq.empty[(String, String)])(_++_).groupBy(_._1).mapValues {
+        _.unzip._2.toList.distinct
+      }
   }
 
   def getActiveTopics: Node = {

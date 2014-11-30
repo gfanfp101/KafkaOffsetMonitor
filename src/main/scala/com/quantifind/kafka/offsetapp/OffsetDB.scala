@@ -107,7 +107,7 @@ object OffsetDB {
   object DbOffsetInfo {
     def parse(in: (Option[Int], String, String, Int, Long, Long, Option[String], Long, Time, Time)): DbOffsetInfo = {
       val (id, group, topic, partition, offset, logSize, owner, timestamp, creation, modified) = in
-      DbOffsetInfo(id, timestamp, OffsetInfo(group, topic, partition, offset, logSize, owner, creation, modified))
+      DbOffsetInfo(id, timestamp, OffsetInfo(group, topic, partition, offset, logSize, None, owner, creation, modified))
     }
 
     def unparse(in: DbOffsetInfo): Option[(Option[Int], String, String, Int, Long, Long, Option[String], Long, Time, Time)] = Some(

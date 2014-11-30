@@ -66,15 +66,20 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
           consumerOpt map {
             consumer =>
               val topicAndPartition = TopicAndPartition(topic, pid)
-              val request =
+              val requestLogSize =
                 OffsetRequest(immutable.Map(topicAndPartition -> PartitionOffsetRequestInfo(OffsetRequest.LatestTime, 1)))
-              val logSize = consumer.getOffsetsBefore(request).partitionErrorAndOffsets(topicAndPartition).offsets.head
+              val logSize = consumer.getOffsetsBefore(requestLogSize).partitionErrorAndOffsets(topicAndPartition).offsets.head
+
+              val requestStartPoint =
+                OffsetRequest(immutable.Map(topicAndPartition -> PartitionOffsetRequestInfo(OffsetRequest.EarliestTime, 1)))
+              val startPoint = consumer.getOffsetsBefore(requestStartPoint).partitionErrorAndOffsets(topicAndPartition).offsets.head
 
               OffsetInfo(group = group,
                 topic = topic,
                 partition = pid,
                 offset = offset,
                 logSize = logSize,
+                startPoint = Some(startPoint),
                 owner = Option(group),
                 creation = Time.fromMilliseconds(stat.getCtime),
                 modified = Time.fromMilliseconds(stat.getMtime))
@@ -134,14 +139,16 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
     val offsets = offsetInfo(group, Seq(topic))
     val offsetSum = offsets.view.map(_.offset).sum
     val logSizeSum = offsets.view.map(_.logSize).sum
+    val startPointSum = offsets.view.map(_.startPoint.getOrElse(0L)).sum
     val lagSum = offsets.view.map(_.lag).sum
     val result = ListMap[String, Any](
       "group" -> group,
       "topic" -> topic,
       "offsetSum" -> offsetSum,
       "logSizeSum" -> logSizeSum,
+      "startPointSum" -> startPointSum,
       "lagSum" -> lagSum,
-      "ratio (%)" -> lagSum/logSizeSum*100)
+      "ratio (%)" -> lagSum.toDouble/(logSizeSum-startPointSum)*100)
     JSONObject(result toMap)
   }
 
@@ -245,6 +252,7 @@ object OffsetGetter {
                         partition: Int,
                         offset: Long,
                         logSize: Long,
+                        startPoint: Option[Long],
                         owner: Option[String],
                         creation: Time,
                         modified: Time) {

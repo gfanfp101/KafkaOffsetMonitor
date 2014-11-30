@@ -148,7 +148,8 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
       "logSizeSum" -> logSizeSum,
       "startPointSum" -> startPointSum,
       "lagSum" -> lagSum,
-      "ratio (%)" -> lagSum.toDouble/(logSizeSum-startPointSum)*100)
+      "ratio (abt)" -> lagSum.toDouble/(logSizeSum-startPointSum),
+      "ratio (%)" -> (lagSum.toDouble/(logSizeSum-startPointSum)*100).toInt)
     JSONObject(result toMap)
   }
 

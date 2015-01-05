@@ -14,6 +14,8 @@ import org.apache.zookeeper.data.Stat
 import scala.util.control.NonFatal
 import scala.util.parsing.json.JSONObject
 import scala.collection.immutable.ListMap
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 
 /**
  * a nicer version of kafka's ConsumerOffsetChecker tool
@@ -57,8 +59,9 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
   private def processPartition(group: String, topic: String, pid: Int): Option[OffsetInfo] = {
     try {
       val (partitionInfoJson, stat: Stat) = ZkUtils.readData(zkClient, s"/kafkastorm2/$group/partition_$pid")
-      val partitionInfo = Json.parseFull(partitionInfoJson).getOrElse(throw new KafkaException("Partition id %pid does not exist".format(pid))).asInstanceOf[Map[String, Any]]
-      val offset = partitionInfo.get("offset").get.asInstanceOf[Int].asInstanceOf[Long]
+      val mapper = new ObjectMapper
+      val partitionInfo = mapper.readTree(partitionInfoJson)
+      val offset = partitionInfo.get("offset").asLong
 
       ZkUtils.getLeaderForPartition(zkClient, topic, pid) match {
         case Some(bid) =>
@@ -204,8 +207,9 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
         ZkUtils.getChildren(zkClient, s"/kafkastorm2/$group").map {
           pid => 
             val (partitionInfoJson, _) = ZkUtils.readData(zkClient, s"/kafkastorm2/$group/$pid")
-            val partitionInfo = Json.parseFull(partitionInfoJson).getOrElse(throw new KafkaException("Partition id %pid does not exist".format(pid))).asInstanceOf[Map[String, Any]]
-            val topic = partitionInfo.get("topic").get.asInstanceOf[String]
+            val mapper = new ObjectMapper
+            val partitionInfo = mapper.readTree(partitionInfoJson)
+            val topic = partitionInfo.get("topic").asText
             Tuple2(topic, group)
         }
       }.foldLeft(Seq.empty[(String, String)])(_++_).groupBy(_._1).mapValues {

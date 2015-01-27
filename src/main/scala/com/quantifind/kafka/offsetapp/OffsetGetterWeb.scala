@@ -115,8 +115,8 @@ object OffsetGetterWeb extends UnfilteredWebApp[OWArgs] with Logging {
     _.offsetInfo(group, Seq(topic))
   }
 
-  def singleOffRatio(group: String, topic: String, args: OWArgs) = withOG(args) {
-    _.singleOffRatio(group, topic)
+  def singleOffRatio(group: String, topic: String, thresholdInPercent: Option[String], args: OWArgs) = withOG(args) {
+    _.singleOffRatio(group, topic, thresholdInPercent)
   }
 
   def getClusterViz(args: OWArgs) = withOG(args) {
@@ -164,7 +164,9 @@ object OffsetGetterWeb extends UnfilteredWebApp[OWArgs] with Logging {
       case GET(Path(Seg("singleoffinfo" :: group :: topic :: Nil))) =>
         JsonContent ~> ResponseString(write(singleOffInfo(group, topic, args)))
       case GET(Path(Seg("singleoffratio" :: group :: topic :: Nil))) =>
-        JsonContent ~> ResponseString(write(singleOffRatio(group, topic, args)))
+        JsonContent ~> ResponseString(write(singleOffRatio(group, topic, None, args)))
+      case GET(Path(Seg("singleoffratio" :: group :: topic :: thresholdInPercent :: Nil))) =>
+        JsonContent ~> ResponseString(write(singleOffRatio(group, topic, Option(thresholdInPercent), args)))
     }
   }
 }

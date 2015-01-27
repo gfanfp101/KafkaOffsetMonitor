@@ -138,12 +138,13 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
     )
   }
 
-  def singleOffRatio(group: String, topic: String): JSONObject = {
+  def singleOffRatio(group: String, topic: String, thresholdInPercent: Option[String]): JSONObject = {
     val offsets = offsetInfo(group, Seq(topic))
     val offsetSum = offsets.view.map(_.offset).sum
     val logSizeSum = offsets.view.map(_.logSize).sum
     val startPointSum = offsets.view.map(_.startPoint.getOrElse(0L)).sum
     val lagSum = offsets.view.map(_.lag).sum
+    val ratio = lagSum.toDouble/(logSizeSum-startPointSum)*100
     val result = ListMap[String, Any](
       "group" -> group,
       "topic" -> topic,
@@ -152,7 +153,11 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
       "startPointSum" -> startPointSum,
       "lagSum" -> lagSum,
       "ratio (abt)" -> lagSum.toDouble/(logSizeSum-startPointSum),
-      "ratio (%)" -> (lagSum.toDouble/(logSizeSum-startPointSum)*100).toInt)
+      "ratio (%)" -> "%3.6f".format(ratio),
+      "thresholdInPercent (%)" -> thresholdInPercent.getOrElse("N/A"),
+      "within threshold" -> { for (t <- thresholdInPercent) yield { t.toDouble > ratio } }.getOrElse("N/A")
+    )
+
     JSONObject(result toMap)
   }
 

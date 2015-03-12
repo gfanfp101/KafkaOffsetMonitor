@@ -52,6 +52,12 @@ angular.module("offsetapp.services", ["ngResource"])
 						offset: _(partitions).pluck("offset").reduce(function(sum, num) {
 							return sum + num;
 						}),
+						startPoint: _(partitions).pluck("startPoint").reduce(function(sum, num) {
+							return sum + num;
+						}),
+						ratio: _(partitions).pluck("ratio").reduce(function(sum, num) {
+							return sum + num;
+						}),
 						timestamp: partitions[0].timestamp
 					};
 				}).value();

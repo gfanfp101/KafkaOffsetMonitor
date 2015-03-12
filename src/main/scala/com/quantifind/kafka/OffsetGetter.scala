@@ -82,7 +82,8 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
                 partition = pid,
                 offset = offset,
                 logSize = logSize,
-                startPoint = Some(startPoint),
+                startPoint = startPoint,
+                ratio = (math rint (logSize-offset).toDouble/(logSize-startPoint)*10000)/100,
                 owner = Option(group),
                 creation = Time.fromMilliseconds(stat.getCtime),
                 modified = Time.fromMilliseconds(stat.getMtime))
@@ -118,8 +119,16 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
 
     val topicList = if (topics.isEmpty) {
       try {
-        ZkUtils.getChildren(
-          zkClient, s"${ZkUtils.BrokerTopicsPath}").toSeq
+        val children = ZkUtils.getChildren(zkClient, s"/kafkastorm2/$group")
+        if (!children.isEmpty) {
+          val (partitionInfoJson, _) = ZkUtils.readData(zkClient, s"/kafkastorm2/$group/" + children.iterator.next)
+          val mapper = new ObjectMapper
+          val partitionInfo = mapper.readTree(partitionInfoJson)
+          val topic = partitionInfo.get("topic").asText 
+          Seq(topic)
+        } else {
+          Seq()
+        }
       } catch {
         case _: ZkNoNodeException => Seq()
       }
@@ -142,7 +151,7 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
     val offsets = offsetInfo(group, Seq(topic))
     val offsetSum = offsets.view.map(_.offset).sum
     val logSizeSum = offsets.view.map(_.logSize).sum
-    val startPointSum = offsets.view.map(_.startPoint.getOrElse(0L)).sum
+    val startPointSum = offsets.view.map(_.startPoint).sum
     val lagSum = offsets.view.map(_.lag).sum
     val ratio = lagSum.toDouble/(logSizeSum-startPointSum)*100
     val result = ListMap[String, Any](
@@ -262,7 +271,8 @@ object OffsetGetter {
                         partition: Int,
                         offset: Long,
                         logSize: Long,
-                        startPoint: Option[Long],
+                        startPoint: Long,
+                        ratio: Double,
                         owner: Option[String],
                         creation: Time,
                         modified: Time) {

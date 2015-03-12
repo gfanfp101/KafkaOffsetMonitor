@@ -33,15 +33,17 @@ class OffsetDB(dbfile: String) {
     val partition = column[Int]("partition")
     val offset = column[Long]("offset")
     val logSize = column[Long]("log_size")
+    val startPoint = column[Long]("start_point")
+    val ratio = column[Double]("ratio")
     val owner = column[Option[String]]("owner")
     val timestamp = column[Long]("timestamp")
     val creation = column[Time]("creation")
     val modified = column[Time]("modified")
 
 
-    def * = (id.?, group, topic, partition, offset, logSize, owner, timestamp, creation, modified).shaped <>(DbOffsetInfo.parse, DbOffsetInfo.unparse)
+    def * = (id.?, group, topic, partition, offset, logSize, startPoint, ratio, owner, timestamp, creation, modified).shaped <>(DbOffsetInfo.parse, DbOffsetInfo.unparse)
 
-    def forHistory = (timestamp, partition, owner, offset, logSize) <>(OffsetPoints.tupled, OffsetPoints.unapply)
+    def forHistory = (timestamp, partition, owner, offset, logSize, startPoint, ratio) <>(OffsetPoints.tupled, OffsetPoints.unapply)
 
     def idx = index("idx_search", (group, topic))
 
@@ -90,6 +92,9 @@ class OffsetDB(dbfile: String) {
       implicit s =>
         if (MTable.getTables("OFFSETS").list().isEmpty) {
           offsets.ddl.create
+        } else {
+          offsets.ddl.drop
+          offsets.ddl.create
         }
     }
   }
@@ -98,25 +103,27 @@ class OffsetDB(dbfile: String) {
 
 object OffsetDB {
 
-  case class OffsetPoints(timestamp: Long, partition: Int, owner: Option[String], offset: Long, logSize: Long)
+  case class OffsetPoints(timestamp: Long, partition: Int, owner: Option[String], offset: Long, logSize: Long, startPoint: Long, ratio: Double)
 
   case class OffsetHistory(group: String, topic: String, offsets: Seq[OffsetPoints])
 
   case class DbOffsetInfo(id: Option[Int] = None, timestamp: Long, offset: OffsetInfo)
 
   object DbOffsetInfo {
-    def parse(in: (Option[Int], String, String, Int, Long, Long, Option[String], Long, Time, Time)): DbOffsetInfo = {
-      val (id, group, topic, partition, offset, logSize, owner, timestamp, creation, modified) = in
-      DbOffsetInfo(id, timestamp, OffsetInfo(group, topic, partition, offset, logSize, None, owner, creation, modified))
+    def parse(in: (Option[Int], String, String, Int, Long, Long, Long, Double, Option[String], Long, Time, Time)): DbOffsetInfo = {
+      val (id, group, topic, partition, offset, logSize, startPoint, ratio, owner, timestamp, creation, modified) = in
+      DbOffsetInfo(id, timestamp, OffsetInfo(group, topic, partition, offset, logSize, startPoint, ratio, owner, creation, modified))
     }
 
-    def unparse(in: DbOffsetInfo): Option[(Option[Int], String, String, Int, Long, Long, Option[String], Long, Time, Time)] = Some(
+    def unparse(in: DbOffsetInfo): Option[(Option[Int], String, String, Int, Long, Long, Long, Double, Option[String], Long, Time, Time)] = Some(
       in.id,
       in.offset.group,
       in.offset.topic,
       in.offset.partition,
       in.offset.offset,
       in.offset.logSize,
+      in.offset.startPoint,
+      in.offset.ratio,
       in.offset.owner,
       in.timestamp,
       in.offset.creation,

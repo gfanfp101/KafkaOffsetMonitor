@@ -42,7 +42,9 @@
 		<th>Partition</th>
 		<th>Offset</th>
 		<th>logSize</th>
+		<th>startPoint</th>
 		<th>Lag</th>
+		<th>ratio</th>
 		<th>Owner</th>
 		<th>Created</th>
 		<th>Last Seen</th>
@@ -54,7 +56,9 @@
 		<td></td>
 		<td>{{c.offset}}</td>
 		<td>{{c.logSize}}</td>
+		<td>{{c.startPoint}}</td>
 		<td>{{c.logSize - c.offset}}</td>
+		<td>{{c.ratio}}</td>
 		<td></td>
 		<td></td>
 		<td></td>
@@ -64,7 +68,9 @@
 		<td>{{p.partition}}</td>
 		<td>{{p.offset}}</td>
 		<td>{{p.logSize}}</td>
+		<td>{{p.startPoint}}</td>
 		<td>{{p.logSize - p.offset}}</td>
+		<td>{{p.ratio}}</td>
 		<td>{{p.owner}}</td>
 		<td><moment timestamp="{{p.creation}}"></moment></td>
 		<td><moment timestamp="{{p.modified}}"></moment></td>

@@ -13,6 +13,7 @@ import com.twitter.util.Time
 import org.apache.zookeeper.data.Stat
 import scala.util.control.NonFatal
 import scala.util.parsing.json.JSONObject
+import scala.util.parsing.json.JSONArray
 import scala.collection.immutable.ListMap
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -147,6 +148,15 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
     )
   }
 
+  def standardDeviation(scores: List[Double], mean: Double): Double = {
+    // Note: Breaks when scores contains no elements. Should be fixed in better way eventually...
+    if (scores.size == 0)
+      return 0 
+
+    val t = scores.map((d: Double) => Math.pow(d - mean, 2))
+    return Math.pow((t.reduceLeft(_+_)/(t.size - 1)), 0.5)
+  }
+
   def singleOffRatio(group: String, topic: String, thresholdInPercent: Option[String]): JSONObject = {
     val offsets = offsetInfo(group, Seq(topic))
     val offsetSum = offsets.view.map(_.offset).sum
@@ -154,6 +164,26 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
     val startPointSum = offsets.view.map(_.startPoint).sum
     val lagSum = offsets.view.map(_.lag).sum
     val ratio = lagSum.toDouble/(logSizeSum-startPointSum)*100
+
+     // - Delayed Partitions are those whos ratio is greater than provided ratio.
+     // - Abnormal Paritions are those whos ratio is 2 standard deviations greater than mean and are delayed.
+     // - Keys must be String (particularly for allRatios) as JSONObject will not accept 'Int'
+     //   as the type for keys. 
+    val allRatios = scala.collection.mutable.ListMap[String, Double]()
+    val delayedPartitions = scala.collection.mutable.ListBuffer[String]()
+
+    for (p <- offsets) {
+      val partitionIndex = p.partition.toString
+      val partitionRatio = (p.lag.toDouble / (p.logSize - p.startPoint)) * 100
+
+      allRatios += (partitionIndex -> partitionRatio)
+      for (t <- thresholdInPercent) { if (partitionRatio > t.toDouble) delayedPartitions += partitionIndex }
+    }
+
+    val stddev = standardDeviation(allRatios.valuesIterator.toList, ratio)
+    val abnormalPartitions = delayedPartitions.filter((key: String) => allRatios.getOrElse(key, 0).asInstanceOf[Double] > ratio + (2*stddev))
+
+
     val result = ListMap[String, Any](
       "group" -> group,
       "topic" -> topic,
@@ -164,7 +194,12 @@ class OffsetGetter(zkClient: ZkClient) extends Logging {
       "ratio (abt)" -> lagSum.toDouble/(logSizeSum-startPointSum),
       "ratio (%)" -> "%3.6f".format(ratio),
       "thresholdInPercent (%)" -> thresholdInPercent.getOrElse("N/A"),
+
+      "partitionRatios (%)" -> JSONObject(allRatios toMap).obj,
+      "abnormalPartitions" -> JSONArray(abnormalPartitions.toList).list,
+
       "within threshold" -> { for (t <- thresholdInPercent) yield { t.toDouble > ratio } }.getOrElse("N/A")
+
     )
 
     JSONObject(result toMap)
